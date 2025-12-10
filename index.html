@@ -1,0 +1,773 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CYBERPUNK CORE: ASCENSION</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --primary: #00fff2;
+            --secondary: #d500f9;
+            --bg-dark: #04040c;
+            --glass: rgba(20, 20, 35, 0.65);
+            --glass-border: rgba(0, 255, 242, 0.3);
+            --text: #ffffff;
+            --danger: #ff2a6d;
+            --success: #05ff00;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: var(--bg-dark);
+            color: var(--text);
+            font-family: 'Rajdhani', 'Segoe UI', sans-serif; /* Желательно подключить киберпанк шрифт */
+            user-select: none;
+            height: 100vh;
+            height: 100dvh; /* Fix for mobile browsers address bar */
+        }
+
+        /* canvas-container for 3D */
+        #canvas-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #000000 100%);
+        }
+
+        /* UI LAYER */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Clicks pass through to 3D */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+        }
+
+        /* GLASSMOLPHISM PANELS */
+        .glass-panel {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            border-radius: 12px;
+            pointer-events: auto;
+            transition: all 0.3s ease;
+        }
+
+        /* --- DESKTOP LAYOUT (Default) --- */
+        .desktop-layout {
+            display: flex;
+            justify-content: space-between;
+            height: 100%;
+            align-items: flex-start;
+        }
+
+        .side-panel {
+            width: 320px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        #shop-panel-desktop {
+            overflow-y: auto;
+        }
+
+        /* --- MOBILE LAYOUT & NAVIGATION --- */
+        .mobile-nav { display: none; }
+        .mobile-overlay { display: none; }
+
+        @media (max-width: 768px) {
+            .desktop-layout { display: none; }
+            
+            /* Top Stats Bar on Mobile */
+            #mobile-top-stats {
+                position: absolute;
+                top: 10px; left: 50%;
+                transform: translateX(-50%);
+                padding: 10px 20px;
+                text-align: center;
+                z-index: 20;
+            }
+
+            /* Bottom Navigation Bar */
+            .mobile-nav {
+                display: flex;
+                position: absolute;
+                bottom: 0; left: 0; width: 100%;
+                height: 70px;
+                justify-content: space-around;
+                align-items: center;
+                background: rgba(10,10,20,0.95);
+                border-top: 2px solid var(--primary);
+                pointer-events: auto;
+                z-index: 30;
+            }
+
+            .nav-btn {
+                flex: 1;
+                text-align: center;
+                font-size: 14px;
+                color: #888;
+                text-transform: uppercase;
+                padding: 10px;
+                transition: 0.3s;
+            }
+            .nav-btn.active {
+                color: var(--primary);
+                text-shadow: 0 0 10px var(--primary);
+            }
+            .nav-icon { font-size: 24px; display: block; margin-bottom: 5px;}
+
+            /* Fullscreen Overlays for Mobile Shop/Settings */
+            .mobile-overlay {
+                display: block;
+                position: fixed;
+                top: 0; left: 0; width: 100%; 
+                height: calc(100dvh - 70px); /* Height minus navbar */
+                z-index: 25;
+                transform: translateY(105%); /* Hidden downwards */
+                transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+                padding: 20px;
+                overflow-y: auto;
+            }
+
+            .mobile-overlay.show {
+                transform: translateY(0);
+            }
+        }
+
+        /* --- TYPOGRAPHY & COMPONENTS --- */
+        h1, h2 {
+            margin: 0 0 15px 0;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 15px rgba(0, 255, 242, 0.5);
+        }
+
+        .main-score {
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--text);
+            text-shadow: 0 0 20px var(--secondary);
+            margin-bottom: 5px;
+        }
+        .sub-score {
+            color: var(--success);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        /* SHOP ITEMS */
+        .upgrade-item {
+            display: flex;
+            align-items: stretch;
+            background: rgba(255, 255, 255, 0.03);
+            margin-bottom: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.05);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .upgrade-item:active { transform: scale(0.98); }
+        
+        .upgrade-item.can-afford:hover {
+            background: rgba(0, 255, 242, 0.05);
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 255, 242, 0.2) inset;
+        }
+
+        .upgrade-item.disabled {
+            opacity: 0.6;
+            filter: grayscale(1) brightness(0.7);
+            cursor: not-allowed;
+        }
+
+        .item-img-container {
+            width: 80px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .item-img-container img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            transition: 0.3s;
+        }
+        .upgrade-item:hover .item-img-container img { transform: scale(1.1); }
+
+        .item-count-badge {
+            position: absolute;
+            top: 5px; right: 5px;
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            border: 1px solid var(--primary);
+        }
+
+        .item-details {
+            flex-grow: 1;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .item-name { font-weight: bold; font-size: 15px; margin-bottom: 4px; color: var(--primary); }
+        .item-stats { display: flex; justify-content: space-between; font-size: 12px; }
+        .cost-val { color: #ffcc00; }
+        .prod-val { color: var(--success); }
+
+        /* Floating Text */
+        .floating-text {
+            position: absolute;
+            font-weight: 900;
+            pointer-events: none;
+            animation: textFloat 0.8s ease-out forwards;
+            font-size: 24px;
+            z-index: 100;
+            /* Глубокая тень для контраста */
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 10px var(--primary);
+        }
+
+        @keyframes textFloat {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            50% { transform: translate(-50%, -100%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -150%) scale(1); }
+        }
+        
+        /* Кнопки управления */
+        .control-btn {
+            width: 100%; padding: 10px; margin-top: 10px;
+            border: none; border-radius: 5px; font-weight: bold; cursor: pointer;
+            text-transform: uppercase; transition: 0.2s;
+        }
+        .btn-save { background: var(--primary); color: #000; box-shadow: 0 0 10px var(--primary); }
+        .btn-reset { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+        .btn-save:active, .btn-reset:active { transform: scale(0.95); }
+
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        
+        <div id="mobile-top-stats" class="glass-panel">
+             <div class="main-score"><span id="mob-score">0</span> W</div>
+             <div class="sub-score"><span id="mob-sps">0</span> W/sec</div>
+        </div>
+
+        <div class="desktop-layout">
+            <div class="side-panel glass-panel">
+                <h1>ЭНЕРГО-ЯДРО</h1>
+                <div class="main-score"><span id="desk-score">0</span></div>
+                <div class="sub-score">ДОХОД: <span id="desk-sps">0</span> W/s</div>
+                <div style="margin-bottom: 20px; font-size: 14px; color: #aaa;">
+                    Сила клика: <span id="desk-cpc" style="color:var(--primary)">1</span>
+                </div>
+                <div style="margin-top: auto;">
+                     <button class="control-btn btn-save" onclick="saveGame()">Сохранить Прогресс</button>
+                     <button class="control-btn btn-reset" onclick="resetGame()">СБРОС СИСТЕМЫ</button>
+                </div>
+            </div>
+
+            <div class="side-panel glass-panel" id="shop-panel-desktop">
+                <h2>РЫНОК ТЕХНОЛОГИЙ</h2>
+                <div id="desktop-shop-list"></div>
+            </div>
+        </div>
+
+        <nav class="mobile-nav">
+            <div class="nav-btn active" onclick="toggleMobileTab('core')">
+                <span class="nav-icon">⚛️</span> Ядро
+            </div>
+            <div class="nav-btn" onclick="toggleMobileTab('shop')">
+                <span class="nav-icon">🛒</span> Магазин
+            </div>
+            <div class="nav-btn" onclick="toggleMobileTab('settings')">
+                <span class="nav-icon">⚙️</span> Опции
+            </div>
+        </nav>
+    </div>
+
+    <div id="shop-overlay" class="mobile-overlay glass-panel">
+        <h2>РЫНОК ТЕХНОЛОГИЙ</h2>
+        <div id="mobile-shop-list"></div>
+    </div>
+
+    <div id="settings-overlay" class="mobile-overlay glass-panel">
+        <h2>СИСТЕМА</h2>
+        <p>Статистика ядра:</p>
+        <p>Кликов сделано: <span id="stats-total-clicks">0</span></p>
+        <p>Всего добыто: <span id="stats-total-energy">0</span></p>
+        <div style="margin-top: 30px;">
+             <button class="control-btn btn-save" onclick="saveGame()">Сохранить вручную</button>
+             <button class="control-btn btn-reset" onclick="resetGame()">ПОЛНЫЙ СБРОС (ОПАСНО)</button>
+        </div>
+    </div>
+
+
+    <script>
+        // ==========================================
+        // UTILITY: NUMBER FORMATTER (Для больших чисел)
+        // ==========================================
+        function formatNumber(num) {
+            if (num < 1000) return Math.floor(num);
+            const suffixes = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+            const suffixIndex = Math.floor(Math.log10(num) / 3);
+            const scaledNum = num / Math.pow(1000, suffixIndex);
+            // Показываем 2 знака после запятой, если число меньше 100, иначе 1 знак
+            return scaledNum.toFixed(scaledNum < 100 ? 1 : 0) + suffixes[suffixIndex];
+        }
+
+        // ==========================================
+        // GAME DATA & STATE (Больше контента!)
+        // ==========================================
+        
+        // Генератор 20 зданий для масштаба
+        const buildingTypes = [
+            { id: "clicker_v1", name: "Нейро-усилитель клика", baseCost: 25, baseProd: 0, clickBuff: 1, imgColor: "00f3ff" },
+            { id: "auto_battery", name: "Графеновая Батарея", baseCost: 150, baseProd: 5, clickBuff: 0, imgColor: "4444ff" },
+            { id: "bio_gen", name: "Био-реактор водорослей", baseCost: 1200, baseProd: 45, clickBuff: 0, imgColor: "00ff88" },
+            { id: "geo_thermal", name: "Геотермальная Скважина", baseCost: 15000, baseProd: 200, clickBuff: 0, imgColor: "ffaa00" },
+            { id: "clicker_v2", name: "Квантовая Перчатка", baseCost: 50000, baseProd: 0, clickBuff: 50, imgColor: "ff0055" },
+            { id: "fission", name: "Ядерный Реактор 'Токамак'", baseCost: 250000, baseProd: 1500, clickBuff: 0, imgColor: "ff5500" },
+            { id: "orbital_array", name: "Орбитальный Собиратель", baseCost: 3500000, baseProd: 12000, clickBuff: 0, imgColor: "00aaff" },
+            { id: "fusion_core", name: "Термоядерный Синтез", baseCost: 50000000, baseProd: 95000, clickBuff: 0, imgColor: "ffffff" },
+            { id: "antimatter", name: "Антиматерия-Конвертер", baseCost: 850000000, baseProd: 650000, clickBuff: 0, imgColor: "bc13fe" },
+            { id: "clicker_v3", name: "Пси-Интерфейс Богов", baseCost: 5000000000, baseProd: 0, clickBuff: 5000, imgColor: "d500f9" },
+            { id: "dyson_swarm", name: "Рой Дайсона (Начальный)", baseCost: 25000000000, baseProd: 12000000, clickBuff: 0, imgColor: "ffee00" },
+            { id: "blackhole_siphon", name: "Сифон Черной Дыры", baseCost: 450000000000, baseProd: 150000000, clickBuff: 0, imgColor: "111111" },
+            // ... можно добавлять до бесконечности
+        ];
+
+        let gameState = {
+            energy: 0,
+            totalEnergy: 0,
+            totalClicks: 0,
+            clickPower: 1,
+            autoProd: 0,
+            buildings: {}
+        };
+
+        // Initialize buildings from template
+        buildingTypes.forEach(b => {
+            gameState.buildings[b.id] = {
+                ...b,
+                count: 0,
+                // Используем плейсхолдеры с разными цветами для визуального разнообразия
+                img: `https://placehold.co/150x150/${b.imgColor}/ffffff?text=${b.name.substring(0,3).toUpperCase()}`
+            };
+        });
+
+        // Load Save Game
+        const savedData = localStorage.getItem('cyberCoreV2Save');
+        if (savedData) {
+            try {
+                const parsed = JSON.parse(savedData);
+                // Глубокое слияние, чтобы новые здания не ломали старые сохранения
+                gameState.energy = parsed.energy || 0;
+                gameState.totalEnergy = parsed.totalEnergy || 0;
+                gameState.totalClicks = parsed.totalClicks || 0;
+                for(let key in parsed.buildings) {
+                    if(gameState.buildings[key]) {
+                        gameState.buildings[key].count = parsed.buildings[key].count;
+                    }
+                }
+            } catch (e) { console.error("Save corrupted, resetting."); }
+        }
+
+
+        // ==========================================
+        // THREE.JS "NEXT GEN" VISUALS
+        // ==========================================
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 2, alpha: false });
+        
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Оптимизация для ретины
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping; // Кинематографическая цветокоррекция
+        renderer.toneMappingExposure = 1.2;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // --- Lights ---
+        const ambientLight = new THREE.AmbientLight(0x111122);
+        scene.add(ambientLight);
+        
+        const centerLight = new THREE.PointLight(0x00fff2, 3, 150);
+        scene.add(centerLight);
+
+        const secondaryLight = new THREE.PointLight(0xd500f9, 2, 200);
+        secondaryLight.position.set(50, -50, 50);
+        scene.add(secondaryLight);
+
+        // --- The "Core" (Complex Structure) ---
+        const coreGroup = new THREE.Group();
+        scene.add(coreGroup);
+
+        // Central glowing sphere
+        const coreMat = new THREE.MeshStandardMaterial({
+            color: 0x000000, emissive: 0x00fff2, emissiveIntensity: 1, roughness: 0.1, metalness: 0.9
+        });
+        const coreSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(3, 2), coreMat);
+        coreGroup.add(coreSphere);
+
+        // Outer Rings (Torus Knots for complexity)
+        const ringMat = new THREE.MeshStandardMaterial({
+            color: 0x111111, emissive: 0x7700ff, emissiveIntensity: 0.2, wireframe: true, transparent: true, opacity: 0.7
+        });
+        const ring1 = new THREE.Mesh(new THREE.TorusKnotGeometry(5, 0.5, 128, 16), ringMat);
+        const ring2 = new THREE.Mesh(new THREE.TorusKnotGeometry(7, 0.3, 128, 16), ringMat);
+        ring2.rotation.x = Math.PI / 2;
+        coreGroup.add(ring1);
+        coreGroup.add(ring2);
+
+        // --- "1000 THINGS" PARTICLE SYSTEM ---
+        // Создаем 1500 частиц вокруг ядра для ощущения масштаба и энергии
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 1500; 
+        const posArray = new Float32Array(particlesCount * 3);
+        const velocityArray = new Float32Array(particlesCount); // Скорость вращения для каждой частицы
+
+        for(let i = 0; i < particlesCount * 3; i+=3) {
+            // Распределение в сфере
+            const r = 10 + Math.random() * 30;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            
+            posArray[i] = r * Math.sin(phi) * Math.cos(theta);
+            posArray[i+1] = r * Math.sin(phi) * Math.sin(theta);
+            posArray[i+2] = r * Math.cos(phi);
+            
+            velocityArray[i/3] = (Math.random() - 0.5) * 0.02; // Случайная скорость
+        }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.4,
+            color: 0x00fff2,
+            blending: THREE.AdditiveBlending, // Важно для эффекта свечения
+            transparent: true,
+            opacity: 0.8
+        });
+        const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particleSystem);
+
+
+        camera.position.z = 35;
+
+        // Raycaster setup for interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Animation states
+        let targetRotationSpeed = 0.002;
+        let currentRotationSpeed = 0.002;
+        let scaleImpulse = 1;
+        let particleEnergyLevel = 0; // Влияет на яркость и скорость частиц
+
+        // ==========================================
+        // GAME LOGIC & UI CONTROLLER
+        // ==========================================
+
+        function calculateStats() {
+            let prod = 0;
+            let click = 1;
+            for (let key in gameState.buildings) {
+                const b = gameState.buildings[key];
+                prod += b.count * b.baseProd;
+                click += b.count * b.clickBuff;
+            }
+            gameState.autoProd = prod;
+            gameState.clickPower = click;
+        }
+
+        function updateUI() {
+            const formattedScore = formatNumber(gameState.energy);
+            const formattedSps = formatNumber(gameState.autoProd);
+            
+            // Mobile Top Bar
+            document.getElementById('mob-score').innerText = formattedScore;
+            document.getElementById('mob-sps').innerText = formattedSps;
+
+            // Desktop Side Panel
+            if(window.innerWidth > 768) {
+                document.getElementById('desk-score').innerText = formattedScore;
+                document.getElementById('desk-sps').innerText = formattedSps;
+                document.getElementById('desk-cpc').innerText = formatNumber(gameState.clickPower);
+            }
+
+            // Settings Stats
+            document.getElementById('stats-total-clicks').innerText = formatNumber(gameState.totalClicks);
+            document.getElementById('stats-total-energy').innerText = formatNumber(gameState.totalEnergy);
+        }
+
+        function renderShop(containerId) {
+            const container = document.getElementById(containerId);
+            if(!container || container.style.display === 'none') return; // Don't render if hidden
+
+            container.innerHTML = '';
+            
+            for (let key in gameState.buildings) {
+                const b = gameState.buildings[key];
+                // Price Formula: base * 1.15^count
+                const cost = Math.floor(b.baseCost * Math.pow(1.15, b.count));
+                const canAfford = gameState.energy >= cost;
+
+                const item = document.createElement('div');
+                item.className = `upgrade-item ${canAfford ? 'can-afford' : 'disabled'}`;
+                
+                let bonusText = b.clickBuff > 0 ? `+${formatNumber(b.clickBuff)} Клик` : `+${formatNumber(b.baseProd)} W/s`;
+                
+                item.innerHTML = `
+                    <div class="item-img-container" style="border-right: 2px solid #${b.imgColor}">
+                        <img src="${b.img}" alt="${b.name}">
+                        <div class="item-count-badge">${b.count}</div>
+                    </div>
+                    <div class="item-details">
+                        <div class="item-name" style="color: #${b.imgColor}">${b.name}</div>
+                        <div class="item-stats">
+                            <span class="cost-val">Цена: ${formatNumber(cost)}</span>
+                            <span class="prod-val">${bonusText}</span>
+                        </div>
+                    </div>
+                `;
+                
+                item.onclick = () => buyUpgrade(key);
+                container.appendChild(item);
+            }
+        }
+
+        function buyUpgrade(id) {
+            const b = gameState.buildings[id];
+            const cost = Math.floor(b.baseCost * Math.pow(1.15, b.count));
+            if (gameState.energy >= cost) {
+                gameState.energy -= cost;
+                b.count++;
+                calculateStats();
+                updateAllShops();
+                updateUI();
+                saveGame();
+            }
+        }
+
+        function updateAllShops() {
+            renderShop('desktop-shop-list');
+            renderShop('mobile-shop-list');
+        }
+
+        // CLICK HANDLER
+        function handleCoreClick(event) {
+            gameState.energy += gameState.clickPower;
+            gameState.totalEnergy += gameState.clickPower;
+            gameState.totalClicks++;
+            
+            // 3D Reaction
+            scaleImpulse = 1.15;
+            currentRotationSpeed = 0.05; 
+            particleEnergyLevel = 1.0; // Вспышка частиц
+
+            // Floating Text (с учетом позиции клика)
+            let x = event.clientX || (event.touches && event.touches[0].clientX) || window.innerWidth/2;
+            let y = event.clientY || (event.touches && event.touches[0].clientY) || window.innerHeight/2;
+            
+            // Немного рандома в позицию текста, чтобы они не накладывались
+            x += (Math.random() - 0.5) * 40;
+            
+            const floatEl = document.createElement('div');
+            floatEl.className = 'floating-text';
+            floatEl.innerText = `+${formatNumber(gameState.clickPower)}`;
+            floatEl.style.left = `${x}px`;
+            floatEl.style.top = `${y}px`;
+            floatEl.style.color = '#00fff2';
+            document.body.appendChild(floatEl);
+            
+            setTimeout(() => floatEl.remove(), 800); // Удаляем элемент после анимации
+
+            updateUI();
+            updateAllShops();
+        }
+
+
+        // ==========================================
+        // MOBILE NAVIGATION & EVENTS
+        // ==========================================
+        let activeMobileTab = 'core';
+
+        window.toggleMobileTab = function(tabName) {
+            activeMobileTab = tabName;
+            
+            // Update Buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // Hide all overlays first
+            document.querySelectorAll('.mobile-overlay').forEach(ov => ov.classList.remove('show'));
+
+            if (tabName === 'core') {
+               // Just show the 3D view
+            } else if (tabName === 'shop') {
+                document.getElementById('shop-overlay').classList.add('show');
+                renderShop('mobile-shop-list'); // Render only when showing
+            } else if (tabName === 'settings') {
+                document.getElementById('settings-overlay').classList.add('show');
+            }
+        }
+
+        // --- 3D Interaction Events ---
+        // Используем 'pointerdown' для универсальной обработки мыши и тача
+        document.addEventListener('pointerdown', onPointerDown, false);
+
+        function onPointerDown(event) {
+            // Если клик был по UI элементу (кнопке, панели), игнорируем его для 3D сцены
+            if (event.target.closest('.glass-panel') || event.target.closest('.mobile-nav')) {
+                return;
+            }
+
+            // Преобразуем координаты клика в нормализованные координаты устройства (-1 to +1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            // Проверяем пересечение с группой ядра
+            const intersects = raycaster.intersectObject(coreGroup, true);
+
+            if (intersects.length > 0) {
+                // Клик точно по ядру
+                handleCoreClick(event);
+            } else {
+                // Клик мимо ядра в пустоту (тоже засчитываем для удобства на мобилках)
+                 if (activeMobileTab === 'core') {
+                     handleCoreClick(event);
+                 }
+            }
+        }
+
+
+        // ==========================================
+        // GAME LOOPS
+        // ==========================================
+        
+        // Auto-Production (every 1s)
+        setInterval(() => {
+            if (gameState.autoProd > 0) {
+                // Добавляем доход, деленный на 10, каждые 100мс для плавности цифр?
+                // Нет, оставим раз в секунду для простоты и производительности.
+                gameState.energy += gameState.autoProd;
+                gameState.totalEnergy += gameState.autoProd;
+                
+                if (scaleImpulse < 1.02) scaleImpulse = 1.02; // Легкая пульсация от авто-дохода
+                updateUI();
+                updateAllShops();
+            }
+        }, 1000);
+
+        // Auto-Save (every 30s)
+        setInterval(saveGame, 30000);
+
+        window.saveGame = function() {
+            localStorage.setItem('cyberCoreV2Save', JSON.stringify(gameState));
+            // Визуальное подтверждение (можно добавить всплывашку, но пока просто в консоль)
+            console.log("Game Saved");
+        }
+
+        window.resetGame = function() {
+            if(confirm("ВНИМАНИЕ: Это полностью уничтожит ваш прогресс. Вы уверены?")) {
+                localStorage.removeItem('cyberCoreV2Save');
+                location.reload();
+            }
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderShop('desktop-shop-list'); // Re-render desktop shop in case layout changed
+        }
+
+        // ==========================================
+        // MAIN ANIMATION LOOP
+        // ==========================================
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // --- Core Animation ---
+            // Smoothly return rotation speed to base
+            currentRotationSpeed += (targetRotationSpeed - currentRotationSpeed) * 0.02;
+            
+            coreGroup.rotation.y += currentRotationSpeed;
+            coreGroup.rotation.z += currentRotationSpeed * 0.5;
+            ring1.rotation.x += currentRotationSpeed * 2;
+            ring2.rotation.y -= currentRotationSpeed * 2;
+
+            // Smooth scale pulse
+            scaleImpulse += (1 - scaleImpulse) * 0.1;
+            coreGroup.scale.set(scaleImpulse, scaleImpulse, scaleImpulse);
+
+            // Dynamic lighting intensity based on activity
+            centerLight.intensity = 3 + (scaleImpulse - 1) * 10 + particleEnergyLevel * 2;
+            coreMat.emissiveIntensity = 1 + (scaleImpulse - 1) * 3 + particleEnergyLevel;
+
+            // --- Particle System Animation ("The 1000 things") ---
+            particleEnergyLevel *= 0.95; // Затухание энергии частиц
+
+            const positions = particleSystem.geometry.attributes.position.array;
+            for(let i = 0; i < particlesCount; i++) {
+                const idx = i * 3;
+                // Вращение вокруг оси Y
+                const x = positions[idx];
+                const z = positions[idx+2];
+                // Скорость зависит от базовой + энергии клика
+                const speed = velocityArray[i] * (1 + particleEnergyLevel * 5);
+                
+                positions[idx] = x * Math.cos(speed) - z * Math.sin(speed);
+                positions[idx+2] = x * Math.sin(speed) + z * Math.cos(speed);
+
+                // Легкое "дыхание" по радиусу
+                positions[idx+1] += Math.sin(time * 2 + i) * 0.01;
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            
+            // Цвет частиц меняется от активности
+            particlesMaterial.color.setHSL(0.5 + particleEnergyLevel*0.2, 1, 0.5 + particleEnergyLevel*0.5);
+
+
+            renderer.render(scene, camera);
+        }
+
+        // INIT
+        calculateStats();
+        updateUI();
+        updateAllShops(); // Initial render for desktop
+        animate();
+
+    </script>
+</body>
+</html>
